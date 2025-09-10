@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Settings, X, Check, Zap, Brain, Star } from 'lucide-react';
+import { Send, Sparkles, Settings, X, Check, Zap, Brain, Star, Paperclip, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Message, Model, GradeLevel, ChatConfig } from '@/types';
+import { Message, Model, GradeLevel, ChatConfig, FileAttachment } from '@/types';
 import { AVAILABLE_MODELS, GRADE_LEVELS, DEFAULT_CHAT_CONFIG } from '@/config/models';
+import FileUpload from './FileUpload';
 
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -19,6 +20,8 @@ export default function Chat() {
     gradeLevel: GRADE_LEVELS[0],
     ...DEFAULT_CHAT_CONFIG,
   });
+  const [selectedFiles, setSelectedFiles] = useState<FileAttachment[]>([]);
+  const [showFileUpload, setShowFileUpload] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -41,17 +44,20 @@ export default function Chat() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && selectedFiles.length === 0) || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim(),
+      content: input.trim() || (selectedFiles.length > 0 ? 'Attached files for analysis' : ''),
       timestamp: new Date(),
+      attachments: selectedFiles.length > 0 ? selectedFiles : undefined,
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
+    setSelectedFiles([]);
+    setShowFileUpload(false);
     setIsLoading(true);
 
     try {
@@ -376,43 +382,93 @@ export default function Chat() {
                           ? 'bg-black text-white rounded-3xl rounded-tr-lg px-6 py-4 border border-black'
                           : 'bg-white text-black rounded-3xl rounded-tl-lg px-6 py-4 border-2 border-gray-200'
                       }`}>
-                        <div className="text-[15px] leading-relaxed">
-                          {message.role === 'assistant' ? (
-                            <div className="prose prose-sm prose-slate max-w-none">
-                              <ReactMarkdown 
-                                remarkPlugins={[remarkGfm]}
-                                components={{
-                                p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                                ul: ({ children }) => <ul className="list-disc pl-4 mb-3 space-y-1">{children}</ul>,
-                                ol: ({ children }) => <ol className="list-decimal pl-4 mb-3 space-y-1">{children}</ol>,
-                                li: ({ children }) => <li className="text-[15px]">{children}</li>,
-                                code: ({ children, className }) => {
-                                  const isInline = !className;
-                                  return isInline ? (
-                                    <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800">{children}</code>
+                        {/* File Attachments */}
+                        {message.attachments && message.attachments.length > 0 && (
+                          <div className="mb-4 space-y-3">
+                            {message.attachments.map((attachment) => (
+                              <div key={attachment.id} className={`p-3 rounded-2xl border ${
+                                message.role === 'user' 
+                                  ? 'bg-white/10 border-white/20' 
+                                  : 'bg-gray-50 border-gray-200'
+                              }`}>
+                                <div className="flex items-start space-x-3">
+                                  {attachment.type.startsWith('image/') ? (
+                                    <div className="flex-shrink-0">
+                                      <img 
+                                        src={attachment.url || attachment.data} 
+                                        alt={attachment.name}
+                                        className="w-20 h-20 object-cover rounded-xl border border-gray-200"
+                                      />
+                                    </div>
                                   ) : (
-                                    <pre className="bg-gray-50 p-3 rounded-lg overflow-x-auto my-3">
-                                      <code className="text-sm font-mono text-gray-800">{children}</code>
-                                    </pre>
-                                  );
-                                },
-                                h1: ({ children }) => <h1 className="text-xl font-bold mb-3 text-black">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 text-black">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-base font-medium mb-2 text-black">{children}</h3>,
-                                strong: ({ children }) => <strong className="font-semibold text-black">{children}</strong>,
-                                em: ({ children }) => <em className="italic">{children}</em>,
-                                blockquote: ({ children }) => (
-                                  <blockquote className="border-l-3 border-gray-300 pl-3 italic text-gray-600 my-3">{children}</blockquote>
-                                ),
-                              }}
-                              >
-                                {message.content}
-                              </ReactMarkdown>
-                            </div>
-                          ) : (
-                            <div className="whitespace-pre-wrap">{message.content}</div>
-                          )}
-                        </div>
+                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                                      message.role === 'user' 
+                                        ? 'bg-white/20' 
+                                        : 'bg-gray-200'
+                                    }`}>
+                                      <FileText className={`h-6 w-6 ${
+                                        message.role === 'user' ? 'text-white' : 'text-gray-600'
+                                      }`} />
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium truncate ${
+                                      message.role === 'user' ? 'text-white' : 'text-gray-900'
+                                    }`}>
+                                      {attachment.name}
+                                    </p>
+                                    <p className={`text-xs mt-0.5 ${
+                                      message.role === 'user' ? 'text-white/70' : 'text-gray-500'
+                                    }`}>
+                                      {(attachment.size / (1024 * 1024)).toFixed(2)} MB
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Message Content */}
+                        {message.content && (
+                          <div className="text-[15px] leading-relaxed">
+                            {message.role === 'assistant' ? (
+                              <div className="prose prose-sm prose-slate max-w-none">
+                                <ReactMarkdown 
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                  p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                                  ul: ({ children }) => <ul className="list-disc pl-4 mb-3 space-y-1">{children}</ul>,
+                                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-3 space-y-1">{children}</ol>,
+                                  li: ({ children }) => <li className="text-[15px]">{children}</li>,
+                                  code: ({ children, className }) => {
+                                    const isInline = !className;
+                                    return isInline ? (
+                                      <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800">{children}</code>
+                                    ) : (
+                                      <pre className="bg-gray-50 p-3 rounded-lg overflow-x-auto my-3">
+                                        <code className="text-sm font-mono text-gray-800">{children}</code>
+                                      </pre>
+                                    );
+                                  },
+                                  h1: ({ children }) => <h1 className="text-xl font-bold mb-3 text-black">{children}</h1>,
+                                  h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 text-black">{children}</h2>,
+                                  h3: ({ children }) => <h3 className="text-base font-medium mb-2 text-black">{children}</h3>,
+                                  strong: ({ children }) => <strong className="font-semibold text-black">{children}</strong>,
+                                  em: ({ children }) => <em className="italic">{children}</em>,
+                                  blockquote: ({ children }) => (
+                                    <blockquote className="border-l-3 border-gray-300 pl-3 italic text-gray-600 my-3">{children}</blockquote>
+                                  ),
+                                }}
+                                >
+                                  {message.content}
+                                </ReactMarkdown>
+                              </div>
+                            ) : (
+                              <div className="whitespace-pre-wrap">{message.content}</div>
+                            )}
+                          </div>
+                        )}
                         <div className={`text-[11px] mt-2 ${
                           message.role === 'user' ? 'text-gray-300' : 'text-gray-400'
                         }`}>
@@ -454,53 +510,86 @@ export default function Chat() {
         {/* Input Area */}
         <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-white/98 via-white/90 to-transparent backdrop-blur-sm">
           <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-            <div className="bg-white/95 rounded-3xl border-2 border-gray-200 p-3 backdrop-blur-xl">
-              <div className="flex items-end space-x-3">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask me anything about your studies..."
-                  className="flex-1 px-5 py-4 bg-transparent resize-none focus:outline-none text-[15px] text-black placeholder-gray-400"
-                  rows={1}
-                  style={{ minHeight: '52px', maxHeight: '150px' }}
-                  disabled={isLoading}
-                />
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isLoading}
-                  className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
-                    !input.trim() || isLoading
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-300'
-                      : 'bg-black text-white border border-black'
-                  }`}
-                >
-                  {isLoading ? (
-                    <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>
-                  ) : (
-                    <Send className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
-              
-              <div className="px-5 pb-2 pt-1 flex items-center justify-between">
-                <div className="flex items-center space-x-3 text-xs text-gray-400">
-                  <span>{selectedModel.name}</span>
-                  <span>•</span>
-                  <span>{selectedGradeLevel.range}</span>
-                  {config.enableReasoning && (
-                    <>
-                      <span>•</span>
-                      <span className="flex items-center">
-                        <Zap className="h-3 w-3 mr-1" />
-                        Reasoning
-                      </span>
-                    </>
-                  )}
+            <div className="bg-white/95 rounded-3xl border-2 border-gray-200 backdrop-blur-xl overflow-hidden">
+              {/* File Upload Section */}
+              {showFileUpload && (
+                <div className="p-4 border-b border-gray-200">
+                  <FileUpload
+                    selectedFiles={selectedFiles}
+                    onFilesSelected={setSelectedFiles}
+                    disabled={isLoading}
+                  />
                 </div>
-                <div className="text-xs text-gray-400">
-                  Press Enter to send
+              )}
+              
+              <div className="p-3">
+                <div className="flex items-end space-x-3">
+                  <div className="flex items-end space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowFileUpload(!showFileUpload)}
+                      disabled={isLoading}
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                        showFileUpload || selectedFiles.length > 0
+                          ? 'bg-black text-white border border-black'
+                          : 'bg-gray-100 text-gray-500 border border-gray-300 hover:bg-gray-200'
+                      } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
+                    >
+                      <Paperclip className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask me anything about your studies..."
+                    className="flex-1 px-5 py-4 bg-transparent resize-none focus:outline-none text-[15px] text-black placeholder-gray-400"
+                    rows={1}
+                    style={{ minHeight: '52px', maxHeight: '150px' }}
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="submit"
+                    disabled={(!input.trim() && selectedFiles.length === 0) || isLoading}
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                      (!input.trim() && selectedFiles.length === 0) || isLoading
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-300'
+                        : 'bg-black text-white border border-black'
+                    }`}
+                  >
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>
+                    ) : (
+                      <Send className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+                
+                <div className="px-5 pb-2 pt-1 flex items-center justify-between">
+                  <div className="flex items-center space-x-3 text-xs text-gray-400">
+                    <span>{selectedModel.name}</span>
+                    <span>•</span>
+                    <span>{selectedGradeLevel.range}</span>
+                    {config.enableReasoning && (
+                      <>
+                        <span>•</span>
+                        <span className="flex items-center">
+                          <Zap className="h-3 w-3 mr-1" />
+                          Reasoning
+                        </span>
+                      </>
+                    )}
+                    {selectedFiles.length > 0 && (
+                      <>
+                        <span>•</span>
+                        <span>{selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Press Enter to send
+                  </div>
                 </div>
               </div>
             </div>

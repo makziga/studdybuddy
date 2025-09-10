@@ -1,8 +1,18 @@
+export interface FileAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  data: string; // base64 encoded data or URL
+  url?: string; // for preview purposes
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  attachments?: FileAttachment[];
 }
 
 export interface Model {

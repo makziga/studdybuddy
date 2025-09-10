@@ -57,12 +57,59 @@ export async function POST(req: NextRequest) {
     // Prepare messages for OpenRouter
     const openAIMessages = [
       { role: 'system' as const, content: systemPrompt },
-      ...messages.map(msg => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.role === 'user' 
-          ? createUserMessage(msg.content, config.gradeLevel.range)
-          : msg.content,
-      })),
+      ...messages.map(msg => {
+        if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
+          // Handle multimodal user message with attachments
+          const content: any[] = [];
+          
+          // Add text content if present
+          if (msg.content && msg.content.trim()) {
+            content.push({
+              type: 'text',
+              text: createUserMessage(msg.content, config.gradeLevel.range),
+            });
+          }
+          
+          // Add file attachments
+          for (const attachment of msg.attachments) {
+            if (attachment.type.startsWith('image/')) {
+              // Handle image attachment
+              content.push({
+                type: 'image_url',
+                image_url: {
+                  url: attachment.data,
+                },
+              });
+            } else if (attachment.type === 'application/pdf') {
+              // Handle PDF attachment
+              content.push({
+                type: 'file',
+                file: {
+                  filename: attachment.name,
+                  file_data: attachment.data,
+                },
+              });
+            }
+          }
+          
+          return {
+            role: 'user' as const,
+            content,
+          };
+        } else if (msg.role === 'user') {
+          // Handle regular user message
+          return {
+            role: 'user' as const,
+            content: createUserMessage(msg.content, config.gradeLevel.range),
+          };
+        } else {
+          // Handle assistant message
+          return {
+            role: 'assistant' as const,
+            content: msg.content,
+          };
+        }
+      }),
     ];
 
     // Prepare reasoning configuration if model supports it
